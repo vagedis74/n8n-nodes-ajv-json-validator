@@ -4,11 +4,16 @@ import {
 	INodeType,
 	INodeTypeBaseDescription,
 	INodeTypeDescription,
+	NodeConnectionType,
 } from 'n8n-workflow';
 
 import Ajv, { type SchemaObject } from 'ajv';
 import addFormats from 'ajv-formats';
 import addErrors from 'ajv-errors';
+
+const ajv = new Ajv({ allErrors: true });
+addFormats(ajv);
+addErrors(ajv);
 
 export class JsonValidatorV1 implements INodeType {
 	description: INodeTypeDescription;
@@ -20,8 +25,11 @@ export class JsonValidatorV1 implements INodeType {
 			defaults: {
 				name: 'Json Validator',
 			},
-			inputs: ['main'],
-			outputs: ['main'],
+			inputs: ['main'] as NodeConnectionType[],
+			outputs: [
+				{ displayName: 'Valid', type: NodeConnectionType.Main },
+				{ displayName: 'Invalid', type: NodeConnectionType.Main },
+			],
 			properties: [
 				{
 					displayName: `Validate data using a JSON Schema.<br />
@@ -61,69 +69,72 @@ export class JsonValidatorV1 implements INodeType {
 	}
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		/**
-		 * Initiate AVJ
-		 */
-		const ajv = new Ajv({ allErrors: true });
-		addFormats(ajv);
-		addErrors(ajv);
-
-		// Get the JSON schema defined by the user
-		const schema = this.getNodeParameter('schema', 0, undefined, {
-			ensureType: 'json',
-		}) as SchemaObject;
-
 		try {
-			ajv.validateSchema(schema);
-			if (ajv.errors) {
-				return this.prepareOutputData([
-					{
+			// Schema is a node-level parameter (same for all items), so index 0 is correct
+			const schema = this.getNodeParameter('schema', 0, undefined, {
+				ensureType: 'json',
+			}) as SchemaObject;
+
+			const validItems: INodeExecutionData[] = [];
+			const invalidItems: INodeExecutionData[] = [];
+
+			try {
+				ajv.validateSchema(schema);
+				if (ajv.errors) {
+					invalidItems.push({
 						json: {
 							error: `Invalid JSON Schema: ${ajv.errorsText(ajv.errors)}`,
 						},
-					},
-				]);
-			}
-		} catch (error) {
-			return this.prepareOutputData([
-				{
+					});
+					return [validItems, invalidItems];
+				}
+			} catch (error) {
+				invalidItems.push({
 					json: {
 						error: `Invalid JSON Schema ${error}`,
 					},
-				},
-			]);
-		}
-
-		// Compile schema
-		const validate = ajv.compile(schema);
-
-		// Get the input data for validation
-		const items = this.getInputData();
-
-		// Loop through each input item and validate against the schema
-		const resultData: INodeExecutionData[] = [];
-
-		for (const element of items) {
-			const inputData = element.json;
-
-			// Run validation
-			const isValid = validate(inputData);
-
-			if (!isValid) {
-				return this.prepareOutputData([
-					{
-						json: {
-							error: ajv.errorsText(validate.errors),
-						},
-					},
-				]);
+				});
+				return [validItems, invalidItems];
 			}
 
-			// If valid, push the item to the output data
-			resultData.push(element);
-		}
+			// Compile schema
+			const validate = ajv.compile(schema);
 
-		// Return validated data
-		return this.prepareOutputData(resultData);
+			// Get the input data for validation
+			const items = this.getInputData();
+
+			// Loop through each input item and validate against the schema
+			for (const element of items) {
+				const inputData = element.json;
+
+				// Run validation
+				const isValid = validate(inputData);
+
+				if (!isValid) {
+					invalidItems.push({
+						json: {
+							error: ajv.errorsText(validate.errors),
+							item: inputData,
+						},
+					});
+				} else {
+					validItems.push(element);
+				}
+			}
+
+			return [validItems, invalidItems];
+		} catch (error) {
+			if (this.continueOnFail()) {
+				const items = this.getInputData();
+				const invalidItems: INodeExecutionData[] = items.map((item) => ({
+					json: {
+						error: (error as Error).message,
+						item: item.json,
+					},
+				}));
+				return [[], invalidItems];
+			}
+			throw error;
+		}
 	}
 }

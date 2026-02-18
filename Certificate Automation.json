@@ -1,0 +1,755 @@
+{
+  "name": "Certificate Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "cert/check",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ef0047f9-077d-423f-98f2-0d48c0bae329",
+      "name": "Check Cert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "cert-check",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Query crt.sh Certificate Transparency logs for the domain\nconst domain = $input.first().json.query.domain;\n\nif (!domain) {\n  return [{ json: { error: 'Domain parameter is required', renewalNeeded: true, daysUntilExpiry: -1 } }];\n}\n\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'GET',\n    url: `https://crt.sh/?q=${encodeURIComponent(domain)}&output=json`,\n    headers: { 'User-Agent': 'n8n-cert-automation/1.0' },\n    returnFullResponse: true,\n    json: true,\n  });\n\n  const certs = Array.isArray(response.body) ? response.body : [];\n  const now = new Date();\n\n  const activeCerts = certs\n    .filter(c => new Date(c.not_after) > now)\n    .sort((a, b) => new Date(b.not_after) - new Date(a.not_after));\n\n  const latestCert = activeCerts[0] || null;\n  const daysUntilExpiry = latestCert\n    ? Math.floor((new Date(latestCert.not_after) - now) / (1000 * 60 * 60 * 24))\n    : -1;\n\n  return [{\n    json: {\n      domain,\n      totalCertsFound: certs.length,\n      activeCerts: activeCerts.length,\n      renewalNeeded: daysUntilExpiry < 30,\n      daysUntilExpiry,\n      latestCert: latestCert ? {\n        commonName: latestCert.common_name,\n        issuer: latestCert.issuer_name,\n        notBefore: latestCert.not_before,\n        notAfter: latestCert.not_after,\n        serialNumber: latestCert.serial_number\n      } : null\n    }\n  }];\n} catch (err) {\n  return [{ json: { error: `Failed to query crt.sh: ${err.message}`, domain, renewalNeeded: true, daysUntilExpiry: -1 } }];\n}"
+      },
+      "id": "2d700f5c-2584-43dc-855b-42d229bd0dd3",
+      "name": "Query crt.sh",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "3ad20f43-4db6-49a6-ad23-17042a7f3d2e",
+      "name": "Check Cert Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "path": "cert/request",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ad3f23c6-5778-4e2c-9e92-8618117aafb3",
+      "name": "Request Cert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        272
+      ],
+      "webhookId": "cert-request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate domain(s) parameter - supports comma-separated list for CN + SANs\nconst rawDomain = $input.first().json.query.domain;\n\nif (!rawDomain) {\n  throw new Error('Domain parameter is required.');\n}\n\nconst domainRegex = /^(\\*\\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\\.[a-zA-Z]{2,}$/;\n\n// Split comma-separated domains and validate each\nconst domains = rawDomain.split(',').map(d => d.trim()).filter(d => d);\n\nfor (const d of domains) {\n  if (!domainRegex.test(d)) {\n    throw new Error(`Invalid domain: ${d}. Must be a valid FQDN.`);\n  }\n  if (d.includes('..') || d.includes('/')) {\n    throw new Error(`Invalid domain characters detected: ${d}`);\n  }\n}\n\nif (domains.length === 0) {\n  throw new Error('At least one domain is required.');\n}\n\nreturn [{ json: { domain: domains.join(','), validated: true } }];"
+      },
+      "id": "2f2c90b9-cdfb-47e8-a006-141d05df609f",
+      "name": "Validate Domain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "domains": "={{ $(\"Validate Domain\").first().json.domain }}",
+        "email": "wouter.bon@inlumi.com",
+        "keyType": "rsa",
+        "propagationSeconds": 30
+      },
+      "id": "f725fe2a-9688-4da6-85b9-d6b8804e280c",
+      "name": "Run Certbot",
+      "type": "n8n-nodes-certbot.certbot",
+      "typeVersion": 1,
+      "position": [
+        480,
+        272
+      ],
+      "credentials": {
+        "cloudflareDnsApi": {
+          "id": "FW3aTSSDQixWGsbj",
+          "name": "Cloudflare DNS account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the certbot node result into a structured response\nconst item = $input.first().json;\nconst domain = $('Validate Domain').first().json.domain;\n\nconst success = item.success === true;\nconst certPath = item.certificatePath || `/etc/letsencrypt/live/${domain}`;\n\nreturn [{\n  json: {\n    success,\n    domain,\n    message: success\n      ? `Certificate issued successfully for ${domain}`\n      : `Certificate issuance failed for ${domain}`,\n    certPath: success ? certPath : null,\n    privateKeyPath: item.privateKeyPath || null,\n    expiryDate: item.expiryDate || null,\n    availableFiles: success\n      ? ['fullchain.pem', 'privkey.pem', 'cert.pem', 'chain.pem']\n      : [],\n    output: (item.rawOutput || '').substring(0, 2000)\n  }\n}];"
+      },
+      "id": "bec45011-d59a-41a2-a4c3-d433fa065306",
+      "name": "Format Certbot Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.success ? 200 : 500 }}"
+        }
+      },
+      "id": "8b4351b6-722d-483c-89c9-d8900fce6839",
+      "name": "Request Cert Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "path": "cert/download",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "eda83709-f5a6-4d02-8314-9437f84a5979",
+      "name": "Download Cert Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        528
+      ],
+      "webhookId": "cert-download",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate domain and whitelist the file name to prevent path traversal\nconst domain = $input.first().json.query.domain;\nconst file = $input.first().json.query.file;\n\nconst allowedFiles = ['fullchain.pem', 'privkey.pem', 'cert.pem', 'chain.pem'];\n\nif (!allowedFiles.includes(file)) {\n  throw new Error(`Invalid file name: '${file}'. Allowed: ${allowedFiles.join(', ')}`);\n}\n\nconst domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])$/;\nif (!domain || !domainRegex.test(domain) || domain.includes('..')) {\n  throw new Error(`Invalid domain: ${domain}`);\n}\n\n// Read from .n8n-files/certs (volume mount of /etc/letsencrypt)\nconst filePath = `/home/node/.n8n-files/certs/live/${domain}/${file}`;\n\nreturn [{ json: { filePath, fileName: file, domain } }];"
+      },
+      "id": "b285b08f-d1e7-4da5-82ad-3a1a9048f32b",
+      "name": "Validate Download Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.filePath }}",
+        "options": {}
+      },
+      "id": "0919ce00-f66a-4530-8d0a-21eed58d70a6",
+      "name": "Read Cert File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        480,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-pem-file"
+              },
+              {
+                "name": "Content-Disposition",
+                "value": "=attachment; filename=\"{{ $('Validate Download Request').first().json.fileName }}\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "0280ca68-9b0b-4668-a6b4-c74a7cfdf3d6",
+      "name": "Download Cert Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "path": "script/windows",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "68c94ce8-4093-4171-983f-0661eb71b4c9",
+      "name": "Windows Script Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        784
+      ],
+      "webhookId": "script-windows",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/scripts/install-cert.ps1",
+        "options": {}
+      },
+      "id": "d6f5b93d-b03e-4e16-8772-5d8733ddb2c2",
+      "name": "Read Windows Script",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        240,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/octet-stream"
+              },
+              {
+                "name": "Content-Disposition",
+                "value": "attachment; filename=\"install-cert.ps1\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "7dc2da7e-5e5b-4ae3-a334-4b551db0aa62",
+      "name": "Windows Script Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "path": "script/linux",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "6575068b-f583-40b6-9de1-b04217c98210",
+      "name": "Linux Script Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1040
+      ],
+      "webhookId": "script-linux",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileSelector": "/home/node/.n8n-files/scripts/install-cert.sh",
+        "options": {}
+      },
+      "id": "14f14bb3-34eb-4cd1-87f2-f3d2b7923b74",
+      "name": "Read Linux Script",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        240,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/octet-stream"
+              },
+              {
+                "name": "Content-Disposition",
+                "value": "attachment; filename=\"install-cert.sh\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "a567a3ae-c927-417b-8e7b-3205f200a65d",
+      "name": "Linux Script Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "path": "cert/list",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5a988e85-eb51-4004-a098-151eccfc2509",
+      "name": "List Certs Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -256
+      ],
+      "webhookId": "cert-list",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "list"
+      },
+      "id": "5fc1514e-5764-4bc8-9d29-d966a9c9a78e",
+      "name": "Certbot List",
+      "type": "n8n-nodes-certbot.certbot",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all certificate items into a single response array\nconst items = $input.all();\nconst certificates = items.map(item => item.json);\n\nreturn [{\n  json: {\n    count: certificates.length,\n    certificates\n  }\n}];"
+      },
+      "id": "502f30c2-171c-4dd7-b47b-98e2edcdc823",
+      "name": "Format Cert List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d029627e-63a5-48bd-a157-4b5fd31fd34c",
+      "name": "List Certs Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "path": "cert/download-pfx",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "51864fcd-89c4-43f4-9472-772566841ef9",
+      "name": "Download PFX Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        1296
+      ],
+      "webhookId": "cert-download-pfx",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "857aj6iCtXBKIq7l",
+          "name": "Cert API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate domain and password for PFX generation\nconst domain = $input.first().json.query.domain;\nconst password = $input.first().json.query.password || 'changeit';\n\nconst domainRegex = /^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])$/;\nif (!domain || !domainRegex.test(domain) || domain.includes('..')) {\n  throw new Error(`Invalid domain: ${domain}`);\n}\n\n// Sanitize password: allow alphanumeric and basic punctuation only\nconst safePassword = password.replace(/[^a-zA-Z0-9!@#%^&*()_+=.-]/g, '');\nif (!safePassword) {\n  throw new Error('Invalid password');\n}\n\nconst basePath = `/home/node/.n8n-files/certs/live/${domain}`;\nconst pfxPath = `/home/node/.n8n-files/certs/${domain}-legacy.pfx`;\n\n// Build the openssl command with -legacy for 3DES (Windows 2012 R2 / .NET 4.5 compat)\nconst cmd = `openssl pkcs12 -export -legacy -out \"${pfxPath}\" -inkey \"${basePath}/privkey.pem\" -in \"${basePath}/fullchain.pem\" -passout \"pass:${safePassword}\" 2>&1 || openssl pkcs12 -export -out \"${pfxPath}\" -inkey \"${basePath}/privkey.pem\" -in \"${basePath}/fullchain.pem\" -passout \"pass:${safePassword}\" 2>&1`;\n\nreturn [{ json: { command: cmd, pfxPath, domain, fileName: `${domain}.pfx` } }];"
+      },
+      "id": "8f6509dd-fc62-472e-9e9d-74ecd9acedcd",
+      "name": "Validate PFX Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate PFX using openssl (requires NODE_FUNCTION_ALLOW_BUILTIN=child_process)\nconst { execSync } = require('child_process');\nconst command = $input.first().json.command;\n\ntry {\n  const output = execSync(command, { encoding: 'utf8', timeout: 30000 });\n  return [{ json: { success: true, output: output || 'PFX generated successfully' } }];\n} catch (error) {\n  // execSync throws on non-zero exit, but the fallback command (after ||) may succeed\n  // Check if the PFX file was actually created\n  const pfxPath = $('Validate PFX Request').first().json.pfxPath;\n  try {\n    const fs = require('fs');\n    fs.accessSync(pfxPath);\n    return [{ json: { success: true, output: 'PFX generated (with warnings)' } }];\n  } catch (e) {\n    throw new Error('Failed to generate PFX: ' + error.message);\n  }\n}"
+      },
+      "id": "be3325b8-5ef5-45af-adee-e4b6297fff00",
+      "name": "Generate PFX",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Validate PFX Request').first().json.pfxPath }}",
+        "options": {}
+      },
+      "id": "22047264-3d66-4834-ad87-f55f64915b5a",
+      "name": "Read PFX File",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        720,
+        1296
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "binary",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/x-pkcs12"
+              },
+              {
+                "name": "Content-Disposition",
+                "value": "=attachment; filename=\"{{ $('Validate PFX Request').first().json.fileName }}\""
+              }
+            ]
+          }
+        }
+      },
+      "id": "90d45983-7df6-4b3f-8048-1c9cd975e77b",
+      "name": "Download PFX Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        960,
+        1296
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Check Cert Webhook": {
+      "main": [
+        [
+          {
+            "node": "Query crt.sh",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query crt.sh": {
+      "main": [
+        [
+          {
+            "node": "Check Cert Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Cert Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Certbot Result": {
+      "main": [
+        [
+          {
+            "node": "Request Cert Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Cert Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Download Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Download Request": {
+      "main": [
+        [
+          {
+            "node": "Read Cert File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Cert File": {
+      "main": [
+        [
+          {
+            "node": "Download Cert Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Windows Script Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Windows Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Windows Script": {
+      "main": [
+        [
+          {
+            "node": "Windows Script Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linux Script Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Linux Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Linux Script": {
+      "main": [
+        [
+          {
+            "node": "Linux Script Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Domain": {
+      "main": [
+        [
+          {
+            "node": "Run Certbot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Certbot": {
+      "main": [
+        [
+          {
+            "node": "Format Certbot Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Certs Webhook": {
+      "main": [
+        [
+          {
+            "node": "Certbot List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Certbot List": {
+      "main": [
+        [
+          {
+            "node": "Format Cert List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Cert List": {
+      "main": [
+        [
+          {
+            "node": "List Certs Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PFX Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate PFX Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate PFX Request": {
+      "main": [
+        [
+          {
+            "node": "Generate PFX",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate PFX": {
+      "main": [
+        [
+          {
+            "node": "Read PFX File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PFX File": {
+      "main": [
+        [
+          {
+            "node": "Download PFX Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "c2af5820-f2aa-4b92-b813-43a8fa8662c5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "04a74855fc9785306e9c291c4ed9bf1f4aac43928cba5c22979ccd67df8cc43e"
+  },
+  "id": "5S0zPmUwqTsWmXW1",
+  "tags": [
+    {
+      "updatedAt": "2026-02-12T23:18:42.155Z",
+      "createdAt": "2026-02-12T23:18:42.155Z",
+      "id": "i6NjD3NewKvyZnFC",
+      "name": "certificate-automation"
+    }
+  ]
+}

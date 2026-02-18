@@ -26,4 +26,7 @@
 		"nodes/**/*.json",
 		"package.json",
 	],
+	"exclude": [
+		"nodes/**/*.test.ts",
+	],
 }

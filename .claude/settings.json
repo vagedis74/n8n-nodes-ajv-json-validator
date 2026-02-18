@@ -1,0 +1,17 @@
+{
+	"hooks": {
+		"PostToolUse": [
+			{
+				"matcher": "Write|Edit",
+				"hooks": [
+					{
+						"type": "command",
+						"command": "node \"C:/Users/wouter.bon/mcp-json-validator/dist/cli.js\" --hook",
+						"timeout": 15,
+						"statusMessage": "Validating n8n workflow..."
+					}
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,114 @@
+{
+	"name": "JSON Validation Demo",
+	"nodes": [
+		{
+			"id": "a5016873-8310-4aad-b587-d5afc04ca976",
+			"name": "When clicking 'Test workflow'",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [
+				0,
+				0
+			],
+			"parameters": {}
+		},
+		{
+			"id": "11f73923-7bd5-4fd5-9636-7a461326bbb9",
+			"name": "Edit Fields",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				220,
+				0
+			],
+			"parameters": {
+				"mode": "raw",
+				"jsonOutput": "{\n  \"foo\": 42,\n  \"bar\": \"hello\"\n}",
+				"options": {}
+			}
+		},
+		{
+			"id": "3afda690-a5e4-441f-907b-2f8e9028bea5",
+			"name": "Json Validator",
+			"type": "n8n-nodes-json-validator.jsonValidator",
+			"typeVersion": 1,
+			"position": [
+				440,
+				0
+			],
+			"parameters": {
+				"schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"foo\": { \"type\": \"integer\" },\n    \"bar\": { \"type\": \"string\" }\n  },\n  \"required\": [\"foo\"],\n  \"additionalProperties\": false\n}"
+			}
+		},
+		{
+			"id": "e9c76fcf-59bc-40fa-ad1d-3208820c472d",
+			"name": "Valid Items",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				660,
+				-100
+			],
+			"parameters": {}
+		},
+		{
+			"id": "62446f40-65fa-46ae-96c1-c722ee9e12d7",
+			"name": "Invalid Items",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				660,
+				100
+			],
+			"parameters": {}
+		}
+	],
+	"connections": {
+		"When clicking 'Test workflow'": {
+			"main": [
+				[
+					{
+						"node": "Edit Fields",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Edit Fields": {
+			"main": [
+				[
+					{
+						"node": "Json Validator",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Json Validator": {
+			"main": [
+				[
+					{
+						"node": "Valid Items",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid Items",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"meta": {
+		"instanceId": ""
+	}
+}

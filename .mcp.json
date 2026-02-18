@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"n8n-workflow-validator": {
+			"command": "node",
+			"args": ["C:/Users/wouter.bon/mcp-json-validator/dist/index.js"]
+		}
+	}
+}
