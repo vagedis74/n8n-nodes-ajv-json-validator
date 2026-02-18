@@ -1,0 +1,366 @@
+{
+	"name": "JSON Validator Test",
+	"nodes": [
+		{
+			"id": "t0-manual-trigger",
+			"name": "When clicking 'Test workflow'",
+			"type": "n8n-nodes-base.manualTrigger",
+			"typeVersion": 1,
+			"position": [
+				0,
+				200
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t1-valid-data",
+			"name": "Valid Data",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				260,
+				-100
+			],
+			"parameters": {
+				"mode": "raw",
+				"jsonOutput": "{\n  \"foo\": 42,\n  \"bar\": \"hello\"\n}",
+				"options": {}
+			}
+		},
+		{
+			"id": "t1-validator",
+			"name": "Validate Valid Data",
+			"type": "n8n-nodes-ajv-json-validator.jsonValidator",
+			"typeVersion": 1,
+			"position": [
+				480,
+				-100
+			],
+			"parameters": {
+				"schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"foo\": { \"type\": \"integer\" },\n    \"bar\": { \"type\": \"string\" }\n  },\n  \"required\": [\"foo\"],\n  \"additionalProperties\": false\n}"
+			}
+		},
+		{
+			"id": "t1-valid-output",
+			"name": "Valid (expected)",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				-200
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t1-invalid-output",
+			"name": "Invalid (unexpected)",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				0
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t2-invalid-type",
+			"name": "Invalid Type",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				260,
+				200
+			],
+			"parameters": {
+				"mode": "raw",
+				"jsonOutput": "{\n  \"foo\": \"not a number\"\n}",
+				"options": {}
+			}
+		},
+		{
+			"id": "t2-validator",
+			"name": "Validate Invalid Type",
+			"type": "n8n-nodes-ajv-json-validator.jsonValidator",
+			"typeVersion": 1,
+			"position": [
+				480,
+				200
+			],
+			"parameters": {
+				"schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"foo\": { \"type\": \"integer\" },\n    \"bar\": { \"type\": \"string\" }\n  },\n  \"required\": [\"foo\"],\n  \"additionalProperties\": false\n}"
+			}
+		},
+		{
+			"id": "t2-valid-output",
+			"name": "Valid (unexpected)1",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				100
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t2-invalid-output",
+			"name": "Invalid (expected)1",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				300
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t3-format-data",
+			"name": "Invalid Email",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				260,
+				500
+			],
+			"parameters": {
+				"mode": "raw",
+				"jsonOutput": "{\n  \"email\": \"not-an-email\"\n}",
+				"options": {}
+			}
+		},
+		{
+			"id": "t3-validator",
+			"name": "Validate Email Format",
+			"type": "n8n-nodes-ajv-json-validator.jsonValidator",
+			"typeVersion": 1,
+			"position": [
+				480,
+				500
+			],
+			"parameters": {
+				"schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"email\": { \"type\": \"string\", \"format\": \"email\" }\n  },\n  \"required\": [\"email\"],\n  \"additionalProperties\": false\n}"
+			}
+		},
+		{
+			"id": "t3-valid-output",
+			"name": "Valid (unexpected)2",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				400
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t3-invalid-output",
+			"name": "Invalid (expected)2",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				600
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t4-missing-required",
+			"name": "Missing Required",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [
+				260,
+				800
+			],
+			"parameters": {
+				"mode": "raw",
+				"jsonOutput": "{}",
+				"options": {}
+			}
+		},
+		{
+			"id": "t4-validator",
+			"name": "Validate Missing Required",
+			"type": "n8n-nodes-ajv-json-validator.jsonValidator",
+			"typeVersion": 1,
+			"position": [
+				480,
+				800
+			],
+			"parameters": {
+				"schema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"foo\": { \"type\": \"integer\" }\n  },\n  \"required\": [\"foo\"],\n  \"additionalProperties\": false\n}"
+			}
+		},
+		{
+			"id": "t4-valid-output",
+			"name": "Valid (unexpected)3",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				700
+			],
+			"parameters": {}
+		},
+		{
+			"id": "t4-invalid-output",
+			"name": "Invalid (expected)3",
+			"type": "n8n-nodes-base.noOp",
+			"typeVersion": 1,
+			"position": [
+				700,
+				900
+			],
+			"parameters": {}
+		}
+	],
+	"connections": {
+		"When clicking 'Test workflow'": {
+			"main": [
+				[
+					{
+						"node": "Valid Data",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "Invalid Type",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "Invalid Email",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "Missing Required",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Valid Data": {
+			"main": [
+				[
+					{
+						"node": "Validate Valid Data",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Validate Valid Data": {
+			"main": [
+				[
+					{
+						"node": "Valid (expected)",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid (unexpected)",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Invalid Type": {
+			"main": [
+				[
+					{
+						"node": "Validate Invalid Type",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Validate Invalid Type": {
+			"main": [
+				[
+					{
+						"node": "Valid (unexpected)1",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid (expected)1",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Invalid Email": {
+			"main": [
+				[
+					{
+						"node": "Validate Email Format",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Validate Email Format": {
+			"main": [
+				[
+					{
+						"node": "Valid (unexpected)2",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid (expected)2",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Missing Required": {
+			"main": [
+				[
+					{
+						"node": "Validate Missing Required",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Validate Missing Required": {
+			"main": [
+				[
+					{
+						"node": "Valid (unexpected)3",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Invalid (expected)3",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"settings": {
+		"executionOrder": "v1"
+	},
+	"meta": {
+		"instanceId": ""
+	}
+}
