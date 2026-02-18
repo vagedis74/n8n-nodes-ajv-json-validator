@@ -47,6 +47,7 @@ If the schema itself is invalid, an error item is sent to the Invalid output.
 
 ## Version history
 
-- **0.2.2** — Current release. Bumped version.
+- **0.2.3** — Current release. Updated README documentation.
+- **0.2.2** — Bumped version.
 - **0.2.1** — Renamed package to `n8n-nodes-ajv-json-validator`. Added test workflow and dev tooling.
 - **0.1.0** — Initial release with JSON Schema validation via AJV.
