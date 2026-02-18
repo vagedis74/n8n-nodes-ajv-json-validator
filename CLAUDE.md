@@ -19,6 +19,8 @@ Package manager is **pnpm** (enforced via preinstall hook — npm/yarn will fail
 | Lint fix | `pnpm lintfix` |
 | Format | `pnpm format` |
 | Test | `pnpm test` (Jest) |
+| Test single | `pnpm test -- --testPathPattern=JsonValidatorV1` |
+| Test by name | `pnpm test -- -t "should pass a single valid"` |
 
 ## Architecture
 
@@ -36,6 +38,7 @@ nodes/JsonValidator/
 - **Validation flow** (in `JsonValidatorV1.node.ts`): validates the schema itself, compiles it with AJV (with `ajv-formats` and `ajv-errors`), then validates each input item. Errors are surfaced via `ajv-errors` with `allErrors: true`. Invalid schemas produce an error item on the Invalid output.
 - **continueOnFail**: Unexpected runtime errors (e.g. malformed JSON parameter) are caught. If `continueOnFail` is enabled, all input items are returned on the Invalid output with the error message. Otherwise the error is re-thrown and the workflow stops.
 - **Build output** goes to `dist/`. The n8n entry point is `dist/nodes/JsonValidator/JsonValidator.node.js` (declared in `package.json` under `n8n.nodes`). Test files are excluded from the build via `tsconfig.json`.
+- **Tests** use a lightweight mock of `IExecuteFunctions` (see `createMockExecuteFunctions` in the test file) rather than importing n8n's test infrastructure. The `execute` method is called with `.call(ctx)` to bind the mock context.
 
 ## Code Style
 
